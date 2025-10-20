@@ -1,0 +1,53 @@
+{
+  "name": "template-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Angular + Express monorepo (skeleton)",
+  "license": "ISC",
+  "packageManager": "yarn@4.9.2",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "bootstrap": "yarn install && node -e \"\" && yarn nx run-many -t build --all --parallel",
+    "bootstrap:affected": "yarn install && yarn nx affected -t build",
+    "build": "yarn nx run-many -t build --projects=client,server --parallel",
+    "dev": "yarn nx run-many --target=serve --projects=server,client --parallel --output-style=stream",
+    "lint": "yarn nx run-many -t lint --all",
+    "test": "yarn nx run-many -t test --all",
+    "prettier:check": "prettier --check .",
+    "prettier:write": "prettier --write .",
+    "prepare": "husky",
+    "test:server": "yarn workspace server test"
+  },
+  "devDependencies": {
+    "@nx/eslint": "21.3.11",
+    "@nx/jest": "21.3.11",
+    "@nx/workspace": "^21.3.11",
+    "@types/jest": "^30.0.0",
+    "@typescript-eslint/eslint-plugin": "^6",
+    "@typescript-eslint/parser": "^6",
+    "concurrently": "^9.2.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-n": "^17.21.3",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-promise": "^7.2.1",
+    "husky": "^9.1.7",
+    "jest": "^30.0.5",
+    "lint-staged": "^16.1.5",
+    "nx": "21.3.11",
+    "prettier": "^3.6.2",
+    "ts-jest": "^29.4.1",
+    "typescript": "5.8.3"
+  },
+  "lint-staged": {
+    "*.{js,ts,json,css,scss,md}": [
+      "prettier --write"
+    ]
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

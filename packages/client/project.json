@@ -1,0 +1,21 @@
+{
+  "name": "client",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "yarn start",
+        "cwd": "packages/client"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "yarn build",
+        "cwd": "packages/client"
+      },
+      "outputs": ["packages/client/dist"]
+    }
+  }
+}
