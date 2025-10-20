@@ -1,0 +1,37 @@
+
+<mat-toolbar color="primary">
+  <div class="header-container">
+    <div class="logo-section">
+      <a routerLink="/" class="logo">
+        <mat-icon>agriculture</mat-icon>
+        <span>Farmster</span>
+      </a>
+    </div>
+
+    <nav class="nav-links">
+      <a
+        mat-button
+        routerLink="/"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        Home
+      </a>
+      <a mat-button routerLink="/dashboard" routerLinkActive="active">
+        Dashboard
+      </a>
+      <a mat-button routerLink="/about" routerLinkActive="active">
+        About
+      </a>
+    </nav>
+
+    <div class="actions">
+      <button mat-icon-button (click)="toggleTheme()" [title]="'Toggle ' + appStore.theme() + ' mode'">
+        <mat-icon>{{ appStore.theme() === 'light' ? 'dark_mode' : 'light_mode' }}</mat-icon>
+      </button>
+      <button mat-raised-button color="accent" routerLink="/auth/login">
+        Login
+      </button>
+    </div>
+  </div>
+</mat-toolbar>

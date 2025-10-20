@@ -4,11 +4,12 @@ import { MatButtonModule } from '@angular/material/button';
 import { AppStore } from './core/store';
 import { isPlatformBrowser } from '@angular/common';
 import { TestComponent } from './features/testcomponent/testcomponent.component';
+import { FooterComponent, HeaderComponent } from './layout';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, MatButtonModule, TestComponent],
+  imports: [RouterOutlet, MatButtonModule, HeaderComponent, FooterComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })

@@ -8,9 +8,11 @@
 <!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
 
 
-<button mat-raised-button color="primary">Hello Material</button>
+<app-header />
 
-<app-testcomponent></app-testcomponent>
+<main class="main-content">
+  <router-outlet />
+</main>
 
-no
-<router-outlet />
+<app-footer />
+
