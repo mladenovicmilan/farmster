@@ -15,7 +15,7 @@
         "command": "yarn build",
         "cwd": "packages/server"
       },
-      "outputs": ["packages/server/dist"]
+      "outputs": ["{projectRoot}/dist"]
     },
     "start": {
       "executor": "nx:run-commands",

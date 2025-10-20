@@ -15,7 +15,7 @@
         "command": "yarn build",
         "cwd": "packages/client"
       },
-      "outputs": ["packages/client/dist"]
+      "outputs": ["{projectRoot}/dist"]
     }
   }
 }
