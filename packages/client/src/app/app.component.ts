@@ -20,7 +20,8 @@ export class AppComponent implements OnInit {
 
   ngOnInit() {
     console.log(isPlatformBrowser(this.platformId) ? '[Browser]' : '[Server]', this.appStore.theme());
-    console.log('test');
+    console.log('blabla')
+    console.log('jbt omg wtf');
   }
 }
 

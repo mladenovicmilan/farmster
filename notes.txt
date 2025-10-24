@@ -1,0 +1,552 @@
+// ---------- Shared ----------
+type ID = number;
+type ISODateTime = string;        // e.g. "2025-10-20T21:55:07.000000Z"
+type ISODate = string;            // e.g. "2025-10-20"
+type Boolish = boolean | 0 | 1;   // API sometimes uses 0/1
+
+// ---------- Farm & config ----------
+interface Farm {
+  id: ID;
+  name: string;
+  location: string | null;
+  country: string;                // e.g. "RS"
+  is_premium: boolean;
+  is_trial: boolean;
+  premium_expires_at: ISODateTime | null;
+  premium_quota: number | null;
+  trial_expires_at: ISODateTime | null;
+  user_id: ID;
+
+  area_measure_unit_id: ID;
+  area_measure_unit: AreaMeasureUnit;
+
+  agro_culture_sorts: AgroCultureSort[];  // not expanded; placeholder
+  regions: Region[];                      // not expanded; placeholder
+  expenses: ExpenseCategory[];            // farm-level catalogue of materials/costs
+  seasons: Season[];
+  tractor_operators: TractorOperator[];
+}
+
+interface AreaMeasureUnit {
+  id: ID;
+  name: string;   // "ha", "ac", "m2" (sample shows "ha")
+  ratio: number;  // conversion ratio to the farm’s base unit (sample: 1 for ha)
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+interface TractorOperator { id: ID; name: string; }
+
+interface Season {
+  id: ID;
+  name: string;                 // sample "2"
+  started_at: string;           // "YYYY-MM-DD HH:mm:ss"
+  ended_at: string | null;
+  farm_id: ID;
+  farm_type: "CROP" | string;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+interface AgroCultureSort { id: ID; name: string; created_at: ISODateTime; updated_at: ISODateTime; }
+interface Region { id: ID; name: string; created_at: ISODateTime; updated_at: ISODateTime; }
+
+interface ExpenseCategory {
+  name: string;                 // e.g. "fgdv", "Dizel"
+  type: "SEED" | "FERTILIZER" | "PESTICIDE" | "HERBICIDE" | "FUEL" | string;
+}
+
+// ---------- Field & map ----------
+interface Field {
+  id: ID;
+  name: string;
+  region: string | null;
+  owned_area: number;
+  rented_area: number;
+  farm_id: ID;
+  field_type: "CROP" | string;
+  is_archived: Boolish;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+
+  agro_cultures_on_field: AgroCultureFieldSeasonOnField[]; // via hasManyThrough
+  map: FieldMap | null;
+}
+
+interface FieldMap {
+  id: ID;
+  field_id: ID;
+  geometry: GeoJSONPolygon;
+  area: number;                 // server-computed (appears to be m²)
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+interface GeoJSONPolygon {
+  type: "Polygon";
+  coordinates: [number, number][][];  // [[ [lng, lat], ... (closed ring) ]]
+}
+
+// ---------- Season ↔ Field ↔ Crop ----------
+interface FieldSeason {
+  id: ID;
+  field_id: ID;
+  season_id: ID;
+  owned_area: number;
+  rented_area: number;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+  // present on some endpoints
+  field?: Field;
+  season?: Season;
+}
+
+interface AgroCulture {
+  id: ID;
+  name: string;                    // e.g., "Duvan", "Kukuruz"
+  farm_type: "CROP" | string;
+  farm_id: ID | null;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+// A crop instance on a field in a given season (ACFS)
+interface AgroCultureFieldSeason {
+  id: ID;
+  agro_culture_id: ID;
+  field_season_id: ID;
+  agro_culture_sort: string | null;
+  area: number;                    // area for this crop in that field/season
+  is_finished: Boolish;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+
+  field_season?: FieldSeason;
+  agro_culture?: AgroCulture;
+}
+
+interface AgroCultureFieldSeasonOnField extends AgroCultureFieldSeason {
+  laravel_through_key: ID;         // confirms hasManyThrough (value == field_id)
+}
+
+// ---------- Activity dictionary vs executions ----------
+interface AgroActivity {
+  id: ID;
+  name: string;                    // "Oranje", "Prskanje", "Berba", ...
+  farm_id: ID | null;
+  agro_activity_group_id: number;  // inferred grouping (1..6 in samples)
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+// An executed (or planned) activity for a specific ACFS
+interface AgroCultureActivity {
+  id: ID;
+  agro_activity_id: ID;
+  agro_culture_field_season_id: ID;
+  bulk_agro_activities_id: ID | null;
+  order: number;                         // planned order in template
+  yield: number | null;
+  yield_is_per_area: boolean | null;
+  started_at: ISODateTime | null;        // API returns full ISO
+  ended_at: ISODateTime | null;
+  marked_as_done_at: ISODateTime | null; // present when done
+  sequence: number | null;               // nth repeat of same activity
+  tractor_operator: string | null;
+  fuel_consumption: number | null;
+  fuel_consumption_is_per_area: boolean | null;
+  note: string | null;
+  cost: number | null;
+  cost_is_per_area: boolean | null;      // present in some responses
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+
+  // server-calculated convenience fields (present in some responses)
+  fuel_consumption_per_area?: number | null;
+  cost_per_area?: number | null;
+  yield_per_area?: number | null;
+
+  agro_activity: AgroActivity;
+  expenses: ActivityExpense[];           // usage lines (name/qty/unit/type)
+  yield_waybills: YieldWaybill[];        // placeholders in samples
+
+  // when fetched via "history", context is embedded:
+  agro_culture_field_season?: AgroCultureFieldSeason & {
+    field_season?: FieldSeason & { field?: Field };
+    agro_culture?: AgroCulture;
+  };
+}
+
+interface ActivityExpense {
+  name: string;     // "Dizel", "fgdv", ...
+  quantity: number;
+  type: ExpenseCategory["type"];
+  measure_unit: string;  // "kg", "l", "pcs", ...
+}
+
+interface YieldWaybill {} // not expanded in samples
+
+// ---------- Requests you showed ----------
+interface FieldGeometryRequest {
+  field_id: ID;
+  geometry: GeoJSONPolygon;
+  type: "Polygon";        // duplicated by client lib
+}
+
+interface AgroActivityUpdatePayload {
+  cost: number | null;
+  cost_unit: string | null;              // e.g. "RSD"
+  started_at: ISODate | null;            // client sends date-only
+  ended_at: ISODate | null;
+  sequence: number | null;
+  fuel_consumption: number | null;
+  fuel_consumption_unit: string | null;  // e.g. "L/ha"
+  tractor_operator: string | null;
+  note: string | null;
+  yield: number | null;
+  yield_measure_unit: string | null;     // e.g. "kg/ha"
+  expenses: ActivityExpense[];           // same shape as usage
+  yield_waybills: YieldWaybill[];
+}
+
+// ---------- Map aggregation endpoint ----------
+interface MapResponse {
+  polygons: FeatureCollection<PolygonGeometry, FieldMapProps>;
+  centroids: FeatureCollection<PointGeometry, FieldMapProps>;
+  bbox: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
+}
+interface FieldMapProps { field_id: ID; area: number; }
+interface FeatureCollection<G extends Geometry, P> { type: "FeatureCollection"; features: Array<Feature<G, P>>; }
+interface Feature<G extends Geometry, P> { type: "Feature"; geometry: G; properties: P; }
+type Geometry = PolygonGeometry | PointGeometry;
+interface PolygonGeometry { type: "Polygon"; coordinates: [number, number][][]; }
+interface PointGeometry   { type: "Point";   coordinates: [number, number]; }
+
+// ---------- Dashboard aggregation (season/culture/activity/sequence) ----------
+interface DashboardResponse { seasons: DashboardSeason[]; }
+
+interface DashboardSeason {
+  id: ID;
+  name: string;
+  farm_type: "CROP" | string;
+  area: number;                             // sum of culture areas
+  summary: VatSplit<MoneyRollup>;
+  agro_cultures: DashboardCulture[];
+}
+
+interface DashboardCulture {
+  id: ID;                                   // AgroCulture.id
+  agroCulture: AgroCultureLite;
+  area: number;                             // area for this culture in season
+  summary: VatSplit<MoneyRollup>;
+  agro_activities: DashboardActivity[];     // grouped by activity name
+  expenses: CultureExpenseSummary[];        // empty in samples (placeholder)
+}
+
+interface AgroCultureLite {
+  id: ID;
+  name: string;
+  farm_type: "CROP" | string;
+  farm_id: ID | null;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+interface DashboardActivity {
+  name: string;                             // e.g. "Prskanje", "Oranje"
+  summary: VatSplit<MoneyRollup>;           // totals across all sequences
+  sequence: DashboardSequence[];            // per sequence number
+}
+
+interface DashboardSequence {
+  number: number;                           // AgroCultureActivity.sequence
+  expenses: SequenceExpenseItem[];          // includes "Plaćena operacija"
+}
+
+interface SequenceExpenseItem {
+  name: string;                             // "Plaćena operacija", "Dizel", "fgdv"
+  prices: PriceLine[];
+}
+
+interface CultureExpenseSummary { name: string; prices: PriceLine[]; } // placeholder
+
+interface PriceLine {
+  quantity: number;
+  quantity_unit: string;                    // "kg", "l", "kom"
+  price_per_unit_with_vat: number;
+  price_per_unit_without_vat: number;
+  price_with_vat: number;                   // quantity * ppu (gross)
+  price_without_vat: number;                // quantity * ppu (net)
+}
+
+interface MoneyRollup { total_expenses: number; total_income: number; total_profit: number; }
+interface VatSplit<T> { vat_included: T; vat_excluded: T; }
+
+// ---------- Expenses tab (purchases) ----------
+interface PurchaseExpense {
+  id: ID;
+  type: ExpenseCategory["type"];            // "SEED", "FERTILIZER", "FUEL", ...
+  name: string;                             // item name
+  purchase_date: ISODateTime;               // normalized to midnight in sample
+  quantity: number;
+  quantity_measure_unit: string;            // "kg", "l", ...
+  price: number;                            // if price_is_per_unit=1 => PPU
+  price_is_per_unit: Boolish;               // 1 = per-unit; else total price
+  price_unit: string;                       // unit the price refers to
+  is_vat_included: Boolish;                 // 1 => price contains VAT
+  vat_percent: number;                      // e.g. 10
+  farm_id: ID;
+
+  // server-computed totals:
+  price_with_vat: number;                   // quantity * PPU (gross) if per-unit
+  price_without_vat: number;                // gross / (1 + vat) when included
+}
+
+// ---------- Storehouse (inputs) stock view ----------
+interface StorehouseStockItem {
+  name: string;                             // material name
+  type: ExpenseCategory["type"];
+  last_change: ISODate;                     // "YYYY-MM-DD"
+  unit_groups: StoreUnitGroup[];            // per-measurement-unit buckets
+}
+
+interface StoreUnitGroup {
+  unit: string;                             // "kg", "l"
+  current_stock: number;
+  changes: {
+    addition: { unit: string; data: StoreChangeEntry[] };
+    removal: { unit: string; data: StoreChangeEntry[] };
+  };
+}
+
+interface StoreChangeEntry {
+  date: ISODate;
+  amount: number;
+  unit: string;
+  // no explicit linkage in sample; could be enriched with purchase/activity ids
+}
+
+// ---------- Goods (outputs) stock view ----------
+interface GoodsStockView {
+  farm_type: "CROP" | string;
+  agro_cultures: GoodsStockPerCulture[];
+}
+
+interface GoodsStockPerCulture {
+  agro_culture: string;                     // crop name, e.g. "Duvan"
+  last_change: ISODate;
+  current_stock: number;
+  unit: string;                             // "kg" in sample
+  changes: {
+    addition: { unit: string; data: GoodsChangeEntry[] };  // harvest entries
+    removal: { unit: string; data: GoodsChangeEntry[] };   // sales/consumption
+  };
+}
+
+interface GoodsChangeEntry {
+  date: ISODate;
+  amount: number;
+  unit: string;
+  good: GoodRecord | null;                  // null for sales/unknown
+}
+
+interface GoodRecord {
+  id: ID;
+  agro_culture_id: ID;
+  season_id: ID;
+  quantity: number;
+  quantity_unit: string;
+  farm_id: ID;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+  season: Season;
+  agro_culture: AgroCulture;
+}
+
+// ---------- Sold goods (sales) ----------
+interface SoldGood {
+  id: ID;
+  sell_date: ISODateTime;                   // normalized midnight
+  season_id: ID;
+  agro_culture_id: ID;
+  agro_culture: AgroCulture;
+
+  quantity: number;
+  quantity_unit: string;                    // "kg"
+  price: number;                            // PPU if price_is_per_unit=1
+  price_is_per_unit: Boolish;               // 1 in sample
+  price_unit: string;                       // unit for price
+  is_vat_included: Boolish;                 // 1 in sample
+  vat_percent: number;                      // e.g. 10
+  farm_id: ID;
+
+  price_with_vat: number;                   // qty * PPU (gross)
+  price_without_vat: number;                // gross / (1+vat)
+}
+
+2) Comprehensive overview of the structure
+
+A. Core domain (operational layer)
+
+Farm is the tenant root. It carries:
+	•	configuration (country, premium/trial, user owner),
+	•	area measure unit (e.g., “ha”, ratio=1),
+	•	catalogs (expense categories/materials, operators),
+	•	seasons.
+
+Field belongs to a farm; it may have a FieldMap (GeoJSON polygon + computed area).
+A Season binds to fields via FieldSeason (per-season owned/rented area).
+A crop (AgroCulture) planted on a field for a season is an AgroCultureFieldSeason (ACFS), which tracks crop-specific area and completion (is_finished).
+
+AgroActivity is the dictionary of task types (e.g., “Oranje”, “Prskanje”… grouped by IDs 1..6 in your samples).
+An AgroCultureActivity is the executed task:
+	•	planned order (order) within a seasonal plan,
+	•	execution window (started_at, ended_at),
+	•	sequence (1, 2, …) when the same task repeats,
+	•	metrics (cost, fuel_consumption, yield, per-area flags),
+	•	free text (note, tractor_operator),
+	•	line-item expenses (materials used, with quantity & units).
+
+You observed marked_as_done_at on completed activities; the history endpoint filters/returns those “done” entries and embeds full context (ACFS → FieldSeason → Field, plus AgroCulture & AgroActivity).
+
+Key invariants (from your data)
+	•	Season area roll-ups make sense: e.g. 10 (owned) + 8 (rented) at FieldSeason level → ACFS area 18; dashboard season area 36 = 18 + 18 across two crops.
+	•	Some boolean flags are 0/1 (cast to booleans in client).
+	•	Date inputs are date-only on write; server normalizes to midnight ISO.
+
+⸻
+
+B. Geometry & map layer
+	•	FieldMap.geometry is GeoJSON Polygon with [lng, lat] pairs; rings are closed.
+	•	Back-office exposes a map aggregation endpoint returning:
+	•	polygons (FeatureCollection of field boundaries with props { field_id, area }),
+	•	centroids (FeatureCollection of label points with same props),
+	•	bbox for fitBounds.
+
+Requests:
+	•	Create/update map: send FieldGeometryRequest (field_id, geometry, "Polygon").
+Responses:
+	•	Updated FieldMap (id, geometry, computed area).
+
+⸻
+
+C. Financial & dashboard aggregation (reporting layer)
+
+The dashboard is a derived read-only view over executed activities:
+
+Season row (DashboardSeason)
+	•	area: total of crop areas for that season.
+	•	summary: totals with VAT split (vat_included, vat_excluded) of expenses / income / profit.
+
+Culture row (DashboardCulture)
+	•	id = AgroCulture.id; includes area and summary.
+	•	agro_activities: group of activities by name.
+	•	Each activity includes:
+	•	summary (across all sequences),
+	•	sequence[]: one entry per AgroCultureActivity.sequence.
+
+Sequence row
+	•	number matches AgroCultureActivity.sequence.
+	•	expenses[] = aggregated priced lines:
+	•	“Plaćena operacija”: the activity’s top-level cost rendered as one line (quantity=1, unit="kom", totals=cost).
+	•	Material lines (e.g., “Dizel”, “fgdv”) reflect usage quantities; pricing can be 0 if no valuation is attached.
+
+In your example, only “Prskanje” sequence #2 had a paid operation (185 RSD) → drives totals. Other lines show usage (“2214 l” of Diesel, “54 kg” of fgdv) with zero price.
+
+Totals:
+	•	MoneyRollup.total_profit = total_income - total_expenses.
+	•	VAT-included vs VAT-excluded are both reported; when VAT is included and set to 10%, net = gross / 1.10 (consistent with your numbers).
+
+⸻
+
+D. Inventory: inputs (“storehouse”) & outputs (“goods”)
+
+1) Inputs: Storehouse (materials)
+	•	Purchases (from the Expenses tab) create additions to stock:
+
+{
+  "id": 793, "type": "SEED", "name": "wdw",
+  "purchase_date": "...Z",
+  "quantity": 34234, "quantity_measure_unit": "kg",
+  "price": 12345, "price_is_per_unit": 1, "price_unit": "kg",
+  "is_vat_included": 1, "vat_percent": 10,
+  "price_with_vat": 422618730, "price_without_vat": 384198845.45
+}
+
+	with per-unit pricing and VAT math: gross = qty * ppu, net = gross / (1 + VAT).
+
+	•	Usage on activities (“expenses” array in AgroActivityUpdatePayload) creates removals in stock (e.g., “Dizel” 2214 L, “fgdv” 4378 kg).
+
+Storehouse stock view aggregates per (name, type, unit):
+	•	current_stock, last_change,
+	•	unit_groups[] each with changes.addition.data[] and changes.removal.data[] (dated deltas).
+
+Your sample shows:
+	•	SEED “wdw”: +34,234 kg (addition),
+	•	FERTILIZER “fgdv”: −4,378 kg removal,
+	•	FUEL “Dizel”: −2,214 l removal.
+
+Note: the stock view entries don’t include foreign keys to purchases or activities in your sample, just dated amounts; linkage may exist internally.
+
+2) Outputs: Goods (harvested produce)
+	•	Additions to goods come from harvest entries (GoodRecord) tied to agro_culture_id and season_id (quantity + unit).
+	•	Removals come from sales (sold-goods) or consumption; removal changes can have good: null in the stock view.
+	•	Sold goods records carry sale pricing and VAT (same math as purchases), with price_is_per_unit=1 in your sample.
+
+Goods stock view aggregates by agro culture:
+	•	current_stock, last_change, default unit,
+	•	per-unit changes (add/rem) with GoodRecord on additions (null on removals).
+
+⸻
+
+E. Requests & responses you captured (where they fit)
+	•	Fields list/detail → Field (with map and agro_cultures_on_field[] (ACFS) and nested agro_culture + field_season.season).
+	•	ACFS detail → ACFS plus agro_activities[] (planned + executed; executed have sequence and marked_as_done_at).
+	•	History → array of completed AgroCultureActivity with full context (ACFS → FieldSeason → Field; plus AgroCulture and AgroActivity).
+	•	Edit history (update activity) → send AgroActivityUpdatePayload; server updates the activity, may create:
+	•	“Plaćena operacija” priced line from cost,
+	•	material usage lines, and
+	•	reflective storehouse removals.
+	•	Map save → FieldGeometryRequest (GeoJSON polygon); response is FieldMap with computed area.
+	•	Map aggregation → MapResponse (polygons, centroids, bbox).
+	•	Dashboard → DashboardResponse (season → culture → activity → sequence with VAT split).
+	•	Expenses tab → list of PurchaseExpense (farm-level input purchases with VAT logic).
+	•	Storehouse stock → list of StorehouseStockItem (per material/units with dated additions/removals).
+	•	Goods stock → GoodsStockView (per agro culture with additions from GoodRecord and removals).
+	•	Sold goods → array of SoldGood (sales with VAT).
+
+⸻
+
+F. Lifecycles & flows (how it fits together)
+	1.	Configuration
+Farm sets units, operators, material catalog; creates season(s).
+	2.	Fields & geometry
+Fields can be drawn/saved as GeoJSON (FieldMap). Map endpoint aggregates shapes & centroids and gives a bbox to fit the viewport.
+	3.	Seasonal structure
+FieldSeason binds fields to seasons; crops (AgroCulture) planted on a field in a season create ACFS entries (track area, finished flag).
+	4.	Planning vs execution
+AgroActivity is the library of tasks. ACFS holds a planned list (with order).
+When a task is done, an AgroCultureActivity is recorded with:
+	•	dates, sequence, operator,
+	•	cost (becomes “Plaćena operacija” at dashboard level),
+	•	expenses[] (usage of materials, e.g., fertilizer, diesel),
+	•	optional yield and waybills.
+	5.	Inventory updates (inputs)
+	•	Purchases (Expenses tab) ⇒ storehouse additions (priced, VAT).
+	•	Activity usage ⇒ storehouse removals (quantities per unit).
+	6.	Inventory updates (outputs)
+	•	Harvest (yield/waybill/“good”) ⇒ goods additions (GoodRecord).
+	•	Sales ⇒ goods removals (SoldGood) and income lines.
+	7.	Dashboard roll-ups
+Aggregate AC activities → by season → culture → activity → sequence, computing:
+	•	VAT-included and VAT-excluded totals,
+	•	expenses (priced lines: paid operation + materials),
+	•	income from sold goods (when present),
+	•	profit = income − expenses.
+In your snapshot, income is 0 in season totals; your sold-goods sample suggests income will appear once included in the dashboard window/time.
+
+G. Units & VAT rules (from the data)
+	•	Area: farm has a default unit (e.g., “ha”); FieldMap.area appears in m² (typical when computed from GeoJSON).
+	•	Fuel: L/ha recorded on activity update; diesel removals in storehouse shown in l.
+	•	Expenses: each usage line carries its own measure_unit.
+
